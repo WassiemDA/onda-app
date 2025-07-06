@@ -7,72 +7,41 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// POST /persona/generate — generate full music persona
+// POST /persona/generate — used when regenerating persona
 router.post('/generate', async (req, res) => {
   try {
     const { topTracks, topArtists } = req.body;
 
-    const trackList = topTracks.map(t => `${t.name} by ${t.artists?.[0]?.name || 'Unknown'}`).slice(0, 50);
-    const artistList = topArtists.map(a => a.name).slice(0, 5);
-
-    const prompt = `
-You are Onda, a poetic and insightful music companion that helps users understand their sonic identity and discover new music that fits — or gently stretches — their taste.
-
-The user listens to the following tracks:
-${trackList.map((t, i) => `${i + 1}. ${t}`).join("\n")}
-
-And their top artists are:
-${artistList.join(", ")}
-
-🎧 Generate a rich, immersive music persona using this structure (no intro, just JSON):
-{
-  "personaSummary": "[Stylish paragraph]",
-  "sonicSignatures": ["..."],
-  "genreEraFusion": ["..."],
-  "toneMapping": {
-    "reflect": {
-      "summary": "[mood summary]",
-      "tracks": ["..."],
-      "recommendation": {
-        "track": "...",
-        "explanation": "..."
-      }
-    },
-    "gym": {
-      "summary": "...",
-      "tracks": ["..."],
-      "recommendation": {
-        "track": "...",
-        "explanation": "..."
-      }
-    },
-    "chill": {
-      "summary": "...",
-      "tracks": ["..."],
-      "recommendation": {
-        "track": "...",
-        "explanation": "..."
-      }
-    }
-  }
-}
-`.trim();
-
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      temperature: 0.8,
-      messages: [
-        { role: "system", content: "You are a poetic and punchy music insight generator." },
-        { role: "user", content: prompt }
-      ]
+    console.log("🧠 [POST] Generating GPT persona with:", {
+      topTracks: topTracks.map(t => t.name),
+      topArtists: topArtists.map(a => a.name)
     });
 
-    const persona = JSON.parse(completion.choices[0].message.content);
+    const model = process.env.GPT_MODEL || 'gpt-4';
+
+    const messages = [
+      {
+        role: "system",
+        content: `You are a music expert. Create a rich, poetic music persona summary and mood-specific track breakdowns for the user, based on their top tracks and artists. Keep it stylish and immersive.`
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ topTracks, topArtists })
+      }
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.8
+    });
+
+    const response = JSON.parse(completion.choices[0].message.content);
 
     res.json({
+      ...response,
       topTracks,
-      topArtists,
-      persona
+      topArtists
     });
   } catch (error) {
     console.error('🔥 [POST] GPT error:', {
@@ -83,33 +52,49 @@ ${artistList.join(", ")}
   }
 });
 
-// GET /persona — fetch Spotify top tracks + artists
+// GET /persona — fetches Spotify top tracks and artists
 router.get('/', async (req, res) => {
   const accessToken = req.query.access_token;
   if (!accessToken) return res.status(400).json({ error: 'Missing access token' });
+
+  console.log("🛂 Received access token:", accessToken);
 
   try {
     const headers = {
       Authorization: `Bearer ${accessToken}`
     };
 
-    const [tracksRes, artistsRes] = await Promise.all([
-      axios.get('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=long_term', { headers }),
-      axios.get('https://api.spotify.com/v1/me/top/artists?limit=5&time_range=long_term', { headers })
-    ]);
+    console.log("🌐 [GET] Fetching Spotify data...");
+
+    // 1. Get top 10 tracks
+    const topTracksRes = await axios.get(
+      'https://api.spotify.com/v1/me/top/tracks?limit=10&time_range=long_term',
+      { headers }
+    );
+    const topTracks = topTracksRes.data?.items || [];
+    console.log("🎵 Top Tracks fetched:", topTracks.map(t => t.name));
+
+    // 2. Get top 5 artists
+    const topArtistsRes = await axios.get(
+      'https://api.spotify.com/v1/me/top/artists?limit=5&time_range=long_term',
+      { headers }
+    );
+    const topArtists = topArtistsRes.data?.items || [];
+    console.log("🎤 Top Artists fetched:", topArtists.map(a => a.name));
 
     res.json({
-      topTracks: tracksRes.data.items || [],
-      topArtists: artistsRes.data.items || []
+      topTracks,
+      topArtists
     });
   } catch (err) {
-    console.error('🔥 [GET] Error fetching from Spotify:', {
+    console.error('🔥 [GET] Error building persona:', {
       message: err.message,
       status: err.response?.status,
-      data: err.response?.data
+      data: err.response?.data,
+      url: err.config?.url
     });
     res.status(500).json({
-      error: 'Spotify fetch failed',
+      error: 'Failed to fetch data from Spotify',
       details: err.response?.data || err.message
     });
   }

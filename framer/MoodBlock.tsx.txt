@@ -1,56 +1,61 @@
-import { useEffect, useState } from "react"
+import React from "react"
 
-type MoodBlockProps = {
-    moodTitle: string
-    moodDescription: string
-    tracks: {
-        title: string
-        artist: string
-        explanation: string
-        spotifyId?: string
-    }[]
+type Track = {
+  title: string
+  artist: string
+  explanation: string
+  spotifyId: string
 }
 
-export function MoodBlock({
-    moodTitle,
-    moodDescription,
-    tracks,
-}: MoodBlockProps) {
-    return (
-        <div style={{ marginBottom: "40px" }}>
-            <h3 style={{ fontSize: "20px", marginBottom: "8px" }}>
-                {moodTitle}
-            </h3>
-            <p style={{ marginBottom: "16px" }}>{moodDescription}</p>
-            <ul style={{ listStyle: "none", paddingLeft: 0 }}>
-                {tracks.map((track, index) => (
-                    <li key={index} style={{ marginBottom: "12px" }}>
-                        <strong>{track.title}</strong> by {track.artist}
-                        <br />
-                        <span style={{ fontSize: "14px" }}>
-                            {track.explanation}
-                        </span>
-                        <br />
-                        {track.spotifyId ? (
-                            <iframe
-                                src={`https://open.spotify.com/embed/track/${track.spotifyId}`}
-                                width="100%"
-                                height="80"
-                                frameBorder="0"
-                                allow="encrypted-media"
-                                style={{
-                                    marginTop: "8px",
-                                    borderRadius: "8px",
-                                }}
-                            ></iframe>
-                        ) : (
-                            <em>
-                                🔍 Preview unavailable (no Spotify link found)
-                            </em>
-                        )}
-                    </li>
-                ))}
-            </ul>
+type Playlist = {
+  title: string
+  description: string
+  tracks: Track[]
+}
+
+type Props = {
+  persona: {
+    playlists?: Playlist[]
+  }
+}
+
+export function MoodBlock({ persona }: Props) {
+  if (!persona?.playlists || !Array.isArray(persona.playlists)) {
+    console.warn("⚠️ MoodBlock: No valid playlists found in persona:", persona)
+    return <p>🕵️ No mood-based playlists available.</p>
+  }
+
+  return (
+    <div style={{ marginTop: "2rem" }}>
+      {persona.playlists.map((playlist, index) => (
+        <div key={index} style={{ marginBottom: "2rem" }}>
+          <h3 style={{ marginBottom: "0.5rem" }}>{playlist.title}</h3>
+          <p style={{ fontStyle: "italic", marginBottom: "1rem" }}>
+            {playlist.description}
+          </p>
+          <ul>
+            {playlist.tracks.map((track, idx) => (
+              <li key={idx} style={{ marginBottom: "1rem" }}>
+                <strong>{track.title}</strong> by {track.artist}
+                <br />
+                <small>{track.explanation}</small>
+                <br />
+                {track.spotifyId ? (
+                  <a
+                    href={`https://open.spotify.com/track/${track.spotifyId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    🔗 Listen on Spotify
+                  </a>
+                ) : (
+                  <span>🔍 Preview unavailable (no Spotify link)</span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
-    )
+      ))}
+    </div>
+  )
 }

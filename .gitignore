@@ -1,0 +1,15 @@
+# Ignore node dependencies
+node_modules/
+
+# Ignore dotenv config
+.env
+
+# Logs
+*.log
+
+# Framer build artifacts (if any)
+*.framerfx
+*.DS_Store
+
+# OS system files
+Thumbs.db

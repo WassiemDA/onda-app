@@ -1,0 +1,24 @@
+import { useEffect, useState } from "react"
+
+export function useDashboardOverride() {
+    const [token, setToken] = useState<string | null>(null)
+
+    useEffect(() => {
+        const url = new URL(window.location.href)
+        const accessToken = url.searchParams.get("access_token")
+
+        if (accessToken) {
+            localStorage.setItem("spotify_access_token", accessToken)
+            setToken(accessToken)
+
+            // Remove token from URL
+            url.searchParams.delete("access_token")
+            window.history.replaceState({}, document.title, url.toString())
+        } else {
+            const stored = localStorage.getItem("spotify_access_token")
+            if (stored) setToken(stored)
+        }
+    }, [])
+
+    return { token }
+}

@@ -1,0 +1,52 @@
+type PlaylistBlockProps = {
+    title: string
+    description: string
+    tracks: {
+        title: string
+        artist: string
+        explanation: string
+        spotifyId?: string
+    }[]
+}
+
+export function PlaylistBlock({
+    title,
+    description,
+    tracks,
+}: PlaylistBlockProps) {
+    return (
+        <div style={{ marginBottom: "40px" }}>
+            <h3 style={{ fontSize: "20px", marginBottom: "8px" }}>{title}</h3>
+            <p style={{ marginBottom: "16px" }}>{description}</p>
+            <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+                {tracks.map((track, index) => (
+                    <li key={index} style={{ marginBottom: "12px" }}>
+                        <strong>{track.title}</strong> by {track.artist}
+                        <br />
+                        <span style={{ fontSize: "14px" }}>
+                            {track.explanation}
+                        </span>
+                        <br />
+                        {track.spotifyId ? (
+                            <iframe
+                                src={`https://open.spotify.com/embed/track/${track.spotifyId}`}
+                                width="100%"
+                                height="80"
+                                frameBorder="0"
+                                allow="encrypted-media"
+                                style={{
+                                    marginTop: "8px",
+                                    borderRadius: "8px",
+                                }}
+                            ></iframe>
+                        ) : (
+                            <em>
+                                🔍 Preview unavailable (no Spotify link found)
+                            </em>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
+}

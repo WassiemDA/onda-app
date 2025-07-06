@@ -1,0 +1,17 @@
+import { useEffect } from "react"
+
+export default function SpotifyCallbackHandler() {
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search)
+        const accessToken = urlParams.get("access_token")
+
+        if (accessToken) {
+            localStorage.setItem("spotify_access_token", accessToken)
+            window.location.href = "/dashboard"
+        } else {
+            console.error("❌ Missing access_token in URL")
+        }
+    }, [])
+
+    return <p>Finalising login...</p>
+}

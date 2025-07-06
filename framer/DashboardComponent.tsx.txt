@@ -1,0 +1,116 @@
+import { useEffect, useState } from "react"
+import { useDashboardOverride } from "./useDashboardOverride.tsx"
+import { MusicPersonaSummary } from "./MusicPersonaSummary.tsx"
+import { PlaylistBlock } from "./PlaylistBlock.tsx"
+import { MoodBlock } from "./MoodBlock.tsx"
+
+type Persona = {
+    userName?: string
+    personaSummary: string
+    topArtists?: string[]
+    playlists: {
+        title: string
+        description: string
+        tracks: {
+            title: string
+            artist: string
+            explanation: string
+            spotifyId?: string
+        }[]
+    }[]
+    moodBlocks?: {
+        moodTitle: string
+        moodDescription: string
+        tracks: {
+            title: string
+            artist: string
+            explanation: string
+            spotifyId?: string
+        }[]
+    }[]
+}
+
+export default function Dashboard() {
+    const { token } = useDashboardOverride()
+    const [persona, setPersona] = useState<Persona | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [regenerating, setRegenerating] = useState(false)
+
+    const fetchPersona = async () => {
+        if (!token) return
+        setLoading(true)
+        try {
+            const fetchDataRes = await fetch(
+                `https://onda-app.au.ngrok.io/persona?access_token=${token}`
+            )
+            const fetchData = await fetchDataRes.json()
+
+            const generateRes = await fetch(
+                "https://onda-app.au.ngrok.io/persona/generate",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(fetchData),
+                }
+            )
+
+            const finalPersona = await generateRes.json()
+            setPersona(finalPersona)
+        } catch (err) {
+            console.error("Error fetching persona:", err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchPersona()
+    }, [token])
+
+    if (loading) return <p>Loading your music persona…</p>
+    if (!persona) return <p>Could not load persona.</p>
+
+    return (
+        <div
+            style={{
+                padding: "32px",
+                fontFamily: "sans-serif",
+                maxWidth: "800px",
+                margin: "0 auto",
+            }}
+        >
+            <MusicPersonaSummary
+                summary={persona.personaSummary}
+                userName={persona.userName}
+            />
+
+            {persona.playlists?.map((playlist, i) => (
+                <PlaylistBlock
+                    key={i}
+                    title={playlist.title}
+                    description={playlist.description}
+                    tracks={playlist.tracks}
+                />
+            ))}
+
+            {persona.moodBlocks?.map((mood, i) => (
+                <MoodBlock
+                    key={i}
+                    moodTitle={mood.moodTitle}
+                    moodDescription={mood.moodDescription}
+                    tracks={mood.tracks}
+                />
+            ))}
+
+            <button
+                onClick={fetchPersona}
+                disabled={regenerating}
+                style={{ marginTop: "24px" }}
+            >
+                Regenerate My Persona
+            </button>
+        </div>
+    )
+}

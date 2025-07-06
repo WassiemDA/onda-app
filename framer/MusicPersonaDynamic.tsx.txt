@@ -1,0 +1,164 @@
+import { useEffect, useState } from "react"
+
+type Persona = {
+    userName?: string
+    personaSummary: string
+    playlists: {
+        title: string
+        description: string
+        tracks: {
+            title: string
+            artist: string
+            spotifyId: string
+            explanation: string
+        }[]
+    }[]
+}
+
+export function MusicPersonaDynamic() {
+    const [persona, setPersona] = useState<Persona | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [regenerating, setRegenerating] = useState(false)
+
+    const fetchPersona = async () => {
+        const token = localStorage.getItem("spotify_access_token")
+        if (!token) return
+
+        setLoading(true)
+        try {
+            const fetchDataRes = await fetch(
+                `https://onda-app.au.ngrok.io/persona?access_token=${token}`
+            )
+            const fetchData = await fetchDataRes.json()
+
+            const generateRes = await fetch(
+                "https://onda-app.au.ngrok.io/persona/generate",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(fetchData),
+                }
+            )
+
+            const newPersona = await generateRes.json()
+            setPersona(newPersona)
+        } catch (err) {
+            console.error("Error fetching persona:", err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const regeneratePersona = async () => {
+        await fetchPersona()
+    }
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const token = params.get("access_token")
+        if (token) {
+            localStorage.setItem("spotify_access_token", token)
+            window.history.replaceState({}, document.title, "/dashboard")
+        }
+
+        fetchPersona()
+    }, [])
+
+    if (loading)
+        return <p style={{ color: "white" }}>Loading your musical self...</p>
+
+    if (!persona)
+        return (
+            <p style={{ color: "white" }}>
+                Something went wrong. Try refreshing.
+            </p>
+        )
+
+    return (
+        <div
+            style={{
+                padding: "24px",
+                backgroundColor: "#111",
+                borderRadius: "16px",
+                color: "white",
+                fontFamily: "sans-serif",
+                maxWidth: "900px",
+                boxShadow: "0 8px 16px rgba(0,0,0,0.2)",
+            }}
+        >
+            <h2 style={{ fontSize: "24px", marginBottom: "12px" }}>
+                🎧 {persona.userName || "Your"} Music Persona
+            </h2>
+            <p style={{ marginBottom: "20px", whiteSpace: "pre-wrap" }}>
+                {persona.personaSummary}
+            </p>
+
+            <button
+                onClick={regeneratePersona}
+                disabled={regenerating}
+                style={{
+                    padding: "10px 20px",
+                    backgroundColor: "#1DB954",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    fontWeight: "bold",
+                    marginBottom: "24px",
+                    cursor: "pointer",
+                }}
+            >
+                {regenerating
+                    ? "Rewriting your vibe..."
+                    : "Regenerate My Persona"}
+            </button>
+
+            {Array.isArray(persona.playlists) &&
+                persona.playlists.map((playlist, i) => (
+                    <div key={i} style={{ marginBottom: "32px" }}>
+                        <h3 style={{ fontSize: "20px", marginBottom: "8px" }}>
+                            {playlist.title}
+                        </h3>
+                        <p style={{ marginBottom: "12px" }}>
+                            {playlist.description}
+                        </p>
+                        <ul style={{ listStyle: "none", padding: 0 }}>
+                            {playlist.tracks.map((track, j) => (
+                                <li key={j} style={{ marginBottom: "20px" }}>
+                                    <strong>{track.title}</strong> by{" "}
+                                    {track.artist}
+                                    <br />
+                                    <em>{track.explanation}</em>
+                                    <br />
+                                    {track.spotifyId ? (
+                                        <iframe
+                                            src={`https://open.spotify.com/embed/track/${track.spotifyId}`}
+                                            width="300"
+                                            height="80"
+                                            frameBorder="0"
+                                            allow="encrypted-media"
+                                            style={{ marginTop: "8px" }}
+                                        />
+                                    ) : (
+                                        <p
+                                            style={{
+                                                fontStyle: "italic",
+                                                color: "#888",
+                                                marginTop: "8px",
+                                            }}
+                                        >
+                                            🔍 Preview unavailable (no Spotify
+                                            link found)
+                                        </p>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                ))}
+        </div>
+    )
+}
+
+export default MusicPersonaDynamic

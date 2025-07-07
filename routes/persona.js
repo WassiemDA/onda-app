@@ -94,7 +94,7 @@ router.get("/", async (req, res) => {
   try {
     const headers = { Authorization: `Bearer ${accessToken}` };
 
-    // Step 2: Fetch top 50 tracks + top 10 artists (long_term)
+    // Step 2: Fetch top 10 tracks + top 10 artists (long_term)
     const [topTracksRes, topArtistsRes] = await Promise.all([
       axios.get("https://api.spotify.com/v1/me/top/tracks?limit=10&time_range=long_term", { headers }),
       axios.get("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=long_term", { headers })
@@ -104,7 +104,7 @@ router.get("/", async (req, res) => {
     const topArtists = topArtistsRes.data?.items || [];
     const spotifyIds = topTracks.map(t => t.id);
 
-    // Step 3: Get Recobeats Track IDs from Spotify IDs
+    // Step 3: Get Recobeats Track IDs from Spotify IDs (must be comma-separated even for one)
     const lookupRes = await axios.get(`https://api.reccobeats.com/v1/track?ids=${spotifyIds.join(",")}`);
     const trackIdMap = {};
     lookupRes.data.content.forEach(track => {
@@ -112,7 +112,7 @@ router.get("/", async (req, res) => {
       trackIdMap[spotifyHref] = track.id;
     });
 
-    // Step 4: Fetch audio features and classify mood
+    // Step 4: Fetch audio features from Recobeats and classify mood
     const audioFeatures = await Promise.all(
       spotifyIds.map(async (spotifyId) => {
         const recobeatsId = trackIdMap[spotifyId];
@@ -122,7 +122,7 @@ router.get("/", async (req, res) => {
           return {
             spotifyId,
             ...res.data,
-            mood: classifyMood(res.data)
+            mood: classifyMood(res.data) // classify using static rule-based logic
           };
         } catch (e) {
           console.warn("⚠️ Recobeats fetch error for", recobeatsId);
@@ -145,7 +145,7 @@ router.post("/generate", async (req, res) => {
     const { topTracks, topArtists, audioFeatures } = req.body;
     if (!topTracks || !topArtists || !audioFeatures) return res.status(400).json({ error: "Missing input data" });
 
-    // Step 1: Chunk topTracks into 2 x 5
+    // Step 1: Chunk topTracks into 2 x 5 (for testing cost control)
     const chunks = [topTracks.slice(0, 5), topTracks.slice(5, 10)];
 
     // Step 2: Send each chunk to GPT using the model defined in .env
@@ -163,22 +163,19 @@ router.post("/generate", async (req, res) => {
           temperature: 0.7
         });
 
-        const jsonMatch = completion.choices[0].message.content.trim();
-        return JSON.parse(jsonMatch);
+        const rawOutput = completion.choices[0].message.content.trim();
+        const cleanedOutput = rawOutput.replace(/\+(\d+(\.\d+)?)/g, "$1"); // Strip leading pluses
+        return JSON.parse(cleanedOutput);
       })
     );
 
-    // Step 3: Merge both GPT responses (basic merge — TODO: refine as needed)
+    // Step 3: Merge both GPT responses
     const finalResponse = gptResponses[0];
-
-    // Merge moods from chunk 2
     for (const mood of ["reflect", "gym", "chill"]) {
       finalResponse.moods[mood].topTracks.push(...(gptResponses[1].moods[mood]?.topTracks || []));
       finalResponse.moods[mood].withinGenre.push(...(gptResponses[1].moods[mood]?.withinGenre || []));
       finalResponse.moods[mood].tastePivots.push(...(gptResponses[1].moods[mood]?.tastePivots || []));
     }
-
-    // Merge taste pivots
     finalResponse.tastePivotPlaylist.push(...(gptResponses[1].tastePivotPlaylist || []));
 
     res.json(finalResponse);

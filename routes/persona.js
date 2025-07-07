@@ -5,6 +5,7 @@ const OpenAI = require("openai");
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// 🎯 Step 1: Define GPT system prompt
 const systemPrompt = `
 You are Onda, an emotionally fluent music discovery director.
 You act through five internal roles to deliver a poetic, structured, emotionally resonant music discovery experience.
@@ -38,7 +39,6 @@ Also include a Vibe Shift Summary comparing recent listening to their historical
 🚨 RULES — Follow Strictly
 ✅ Output must be in strict, valid JSON format
 ✅ Use the output structure exactly as shown — no prose outside the JSON
-✅ All suggestions must come from the curated track pool (real songs only)
 ❌ Do not invent tracks, artists, or collaborations
 ❌ Do not repeat any track across sections
 ✅ Clearly label Taste Pivots
@@ -78,6 +78,15 @@ Tone Guidelines:
 • Use white space to support readability and breathing room between sections
 `.trim();
 
+// 🔥 Utility: Classify a track into a mood category based on audio features
+function classifyMood({ energy, valence, danceability }) {
+  if (energy >= 0.7 && valence >= 0.5 && danceability >= 0.6) return "gym";
+  if (energy <= 0.4 && valence <= 0.4) return "reflect";
+  if (valence >= 0.5 && energy >= 0.3 && energy <= 0.6) return "chill";
+  return null; // fallback for edge cases
+}
+
+// ✅ GET /persona — fetch Spotify data, enrich with Recobeats, classify moods
 router.get("/", async (req, res) => {
   const accessToken = req.query.access_token;
   if (!accessToken) return res.status(400).json({ error: "Missing access token" });
@@ -85,87 +94,98 @@ router.get("/", async (req, res) => {
   try {
     const headers = { Authorization: `Bearer ${accessToken}` };
 
+    // Step 2: Fetch top 50 tracks + top 10 artists (long_term)
     const [topTracksRes, topArtistsRes] = await Promise.all([
-      axios.get("https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=long_term", { headers }),
+      axios.get("https://api.spotify.com/v1/me/top/tracks?limit=10&time_range=long_term", { headers }),
       axios.get("https://api.spotify.com/v1/me/top/artists?limit=10&time_range=long_term", { headers })
     ]);
 
-    res.json({
-      topTracks: topTracksRes.data?.items || [],
-      topArtists: topArtistsRes.data?.items || [],
-      audioFeatures: [] // placeholder for Recobeats later
+    const topTracks = topTracksRes.data?.items || [];
+    const topArtists = topArtistsRes.data?.items || [];
+    const spotifyIds = topTracks.map(t => t.id);
+
+    // Step 3: Get Recobeats Track IDs from Spotify IDs
+    const lookupRes = await axios.get(`https://api.reccobeats.com/v1/track?ids=${spotifyIds.join(",")}`);
+    const trackIdMap = {};
+    lookupRes.data.content.forEach(track => {
+      const spotifyHref = track.href.split("/").pop();
+      trackIdMap[spotifyHref] = track.id;
     });
-  } catch (err) {
-    console.error("🔥 [GET] Spotify fetch error:", err.response?.data || err.message);
-    res.status(500).json({ error: "Failed to fetch Spotify data" });
-  }
-});
 
-router.post("/generate", async (req, res) => {
-  try {
-    const { topTracks, topArtists } = req.body;
-    const chunks = chunkTracks(topTracks, 25);
-
-    const responses = await Promise.all(
-      chunks.map(async (trackChunk, index) => {
-        console.log(`🧠 Sending GPT chunk ${index + 1}`);
-        const completion = await openai.chat.completions.create({
-          model: process.env.GPT_MODEL || "gpt-3.5-turbo",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: JSON.stringify({ topTracks: trackChunk, topArtists })
-            }
-          ],
-          temperature: 0.8
-        });
-
-        const raw = completion.choices[0].message.content;
-        console.log(`📦 GPT Output Chunk ${index + 1}:`, raw);
-        return JSON.parse(raw);
+    // Step 4: Fetch audio features and classify mood
+    const audioFeatures = await Promise.all(
+      spotifyIds.map(async (spotifyId) => {
+        const recobeatsId = trackIdMap[spotifyId];
+        if (!recobeatsId) return null;
+        try {
+          const res = await axios.get(`https://api.reccobeats.com/v1/track/${recobeatsId}/audio-features`);
+          return {
+            spotifyId,
+            ...res.data,
+            mood: classifyMood(res.data)
+          };
+        } catch (e) {
+          console.warn("⚠️ Recobeats fetch error for", recobeatsId);
+          return null;
+        }
       })
     );
 
-    const merged = mergeChunks(responses);
-    res.json(merged);
-  } catch (error) {
-    console.error("🔥 [POST] GPT error:", error.message || error);
-    res.status(500).json({ error: "Failed to generate persona" });
+    const filteredAudio = audioFeatures.filter(Boolean);
+    res.json({ topTracks, topArtists, audioFeatures: filteredAudio });
+  } catch (err) {
+    console.error("🔥 [GET] Spotify fetch error:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to fetch Spotify or Recobeats data" });
   }
 });
 
-function chunkTracks(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) {
-    out.push(arr.slice(i, i + size));
-  }
-  return out;
-}
+// ✅ POST /persona/generate — sends 2 chunks of 5 tracks each to GPT
+router.post("/generate", async (req, res) => {
+  try {
+    const { topTracks, topArtists, audioFeatures } = req.body;
+    if (!topTracks || !topArtists || !audioFeatures) return res.status(400).json({ error: "Missing input data" });
 
-function mergeChunks(responses) {
-  const base = responses[0];
-  for (let i = 1; i < responses.length; i++) {
-    const next = responses[i];
-    for (const mood of ["reflect", "gym", "chill"]) {
-      if (base.moods[mood] && next.moods[mood]) {
-        ["topTracks", "withinGenre", "tastePivots"].forEach((section) => {
-          base.moods[mood][section] = [
-            ...(base.moods[mood][section] || []),
-            ...(next.moods[mood][section] || [])
-          ].slice(0, 5);
+    // Step 1: Chunk topTracks into 2 x 5
+    const chunks = [topTracks.slice(0, 5), topTracks.slice(5, 10)];
+
+    // Step 2: Send each chunk to GPT using the model defined in .env
+    const gptModel = process.env.GPT_MODEL || "gpt-4";
+    const gptResponses = await Promise.all(
+      chunks.map(async (chunk, i) => {
+        const userPrompt = `Here are some of my top tracks and artists:\n\nTracks:\n${chunk.map(t => `${t.name} – ${t.artists.map(a => a.name).join(", ")}`).join("\n")}\n\nArtists:\n${topArtists.map(a => a.name).join(", ")}`;
+
+        const completion = await openai.chat.completions.create({
+          model: gptModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.7
         });
-      }
+
+        const jsonMatch = completion.choices[0].message.content.trim();
+        return JSON.parse(jsonMatch);
+      })
+    );
+
+    // Step 3: Merge both GPT responses (basic merge — TODO: refine as needed)
+    const finalResponse = gptResponses[0];
+
+    // Merge moods from chunk 2
+    for (const mood of ["reflect", "gym", "chill"]) {
+      finalResponse.moods[mood].topTracks.push(...(gptResponses[1].moods[mood]?.topTracks || []));
+      finalResponse.moods[mood].withinGenre.push(...(gptResponses[1].moods[mood]?.withinGenre || []));
+      finalResponse.moods[mood].tastePivots.push(...(gptResponses[1].moods[mood]?.tastePivots || []));
     }
 
-    if (Array.isArray(base.tastePivotPlaylist) && Array.isArray(next.tastePivotPlaylist)) {
-      base.tastePivotPlaylist = [...base.tastePivotPlaylist, ...next.tastePivotPlaylist].slice(0, 5);
-    }
+    // Merge taste pivots
+    finalResponse.tastePivotPlaylist.push(...(gptResponses[1].tastePivotPlaylist || []));
 
-    if (next.vibeShift) base.vibeShift = next.vibeShift;
+    res.json(finalResponse);
+  } catch (err) {
+    console.error("🔥 [POST] GPT error:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to generate persona" });
   }
-
-  return base;
-}
+});
 
 module.exports = router;

@@ -8,36 +8,30 @@ type Persona = {
     userName?: string
     personaSummary: string
     topArtists?: string[]
+    mood?: string
+    vibe?: string
     playlists: {
         title: string
         description: string
         tracks: {
             title: string
             artist: string
+            spotifyId: string
             explanation: string
-            spotifyId?: string
-        }[]
-    }[]
-    moodBlocks?: {
-        moodTitle: string
-        moodDescription: string
-        tracks: {
-            title: string
-            artist: string
-            explanation: string
-            spotifyId?: string
         }[]
     }[]
 }
 
 export default function Dashboard() {
-    const { token } = useDashboardOverride()
     const [persona, setPersona] = useState<Persona | null>(null)
     const [loading, setLoading] = useState(true)
     const [regenerating, setRegenerating] = useState(false)
+    const override = useDashboardOverride()
 
     const fetchPersona = async () => {
+        const token = localStorage.getItem("spotify_access_token")
         if (!token) return
+
         setLoading(true)
         try {
             const fetchDataRes = await fetch(
@@ -49,9 +43,7 @@ export default function Dashboard() {
                 "https://onda-app.au.ngrok.io/persona/generate",
                 {
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(fetchData),
                 }
             )
@@ -67,50 +59,34 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchPersona()
-    }, [token])
+    }, [])
 
-    if (loading) return <p>Loading your music persona…</p>
-    if (!persona) return <p>Could not load persona.</p>
+    if (loading) return <div>Loading your music persona...</div>
+    if (!persona) return <div>Could not load persona.</div>
+
+    const mergedPersona = {
+        ...persona,
+        ...override,
+    }
 
     return (
-        <div
-            style={{
-                padding: "32px",
-                fontFamily: "sans-serif",
-                maxWidth: "800px",
-                margin: "0 auto",
-            }}
-        >
-            <MusicPersonaSummary
-                summary={persona.personaSummary}
-                userName={persona.userName}
-            />
-
-            {persona.playlists?.map((playlist, i) => (
-                <PlaylistBlock
-                    key={i}
-                    title={playlist.title}
-                    description={playlist.description}
-                    tracks={playlist.tracks}
-                />
-            ))}
-
-            {persona.moodBlocks?.map((mood, i) => (
-                <MoodBlock
-                    key={i}
-                    moodTitle={mood.moodTitle}
-                    moodDescription={mood.moodDescription}
-                    tracks={mood.tracks}
-                />
-            ))}
-
-            <button
-                onClick={fetchPersona}
-                disabled={regenerating}
-                style={{ marginTop: "24px" }}
-            >
+        <div>
+            <h1>🎧 Your Music Persona</h1>
+            <MusicPersonaSummary summary={mergedPersona.personaSummary} />
+            <button onClick={fetchPersona} disabled={regenerating}>
                 Regenerate My Persona
             </button>
+            {mergedPersona.playlists?.map((playlist, idx) => (
+                <div key={idx}>
+                    <MoodBlock
+                        title={playlist.title}
+                        description={playlist.description}
+                    />
+                    {playlist.tracks.map((track, i) => (
+                        <PlaylistBlock key={i} track={track} />
+                    ))}
+                </div>
+            ))}
         </div>
     )
 }

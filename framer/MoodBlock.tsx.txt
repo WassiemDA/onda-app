@@ -1,66 +1,13 @@
-import { useEffect, useState } from "react"
-
-type Playlist = {
-  title: string
-  description: string
-  tracks: {
-    title: string
-    artist: string
-    spotifyId: string
-    explanation: string
-  }[]
-}
-
 type MoodBlockProps = {
-  persona: {
-    playlists?: Playlist[]
-  }
+    title: string
+    description: string
 }
 
-export function MoodBlock({ persona }: MoodBlockProps) {
-  const [hasMoods, setHasMoods] = useState(false)
-
-  useEffect(() => {
-    if (persona?.playlists && persona.playlists.length > 0) {
-      setHasMoods(true)
-    }
-  }, [persona])
-
-  if (!hasMoods) {
-    return <p>No mood-based playlists available.</p>
-  }
-
-  return (
-    <div style={{ marginTop: "2rem" }}>
-      {persona.playlists?.map((playlist, index) => (
-        <div key={index} style={{ marginBottom: "2rem" }}>
-          <h3 style={{ marginBottom: "0.25rem" }}>{playlist.title}</h3>
-          <p style={{ marginBottom: "1rem", color: "#666" }}>{playlist.description}</p>
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {playlist.tracks.map((track, i) => (
-              <li key={i} style={{ marginBottom: "1rem" }}>
-                <strong>{track.title}</strong> by {track.artist}
-                <br />
-                <em>{track.explanation}</em>
-                {track.spotifyId ? (
-                  <div style={{ marginTop: "0.5rem" }}>
-                    <iframe
-                      src={`https://open.spotify.com/embed/track/${track.spotifyId}`}
-                      width="100%"
-                      height="80"
-                      frameBorder="0"
-                      allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                      loading="lazy"
-                    ></iframe>
-                  </div>
-                ) : (
-                  <p style={{ color: "#999" }}>🔍 Preview unavailable (no Spotify link found)</p>
-                )}
-              </li>
-            ))}
-          </ul>
+export function MoodBlock({ title, description }: MoodBlockProps) {
+    return (
+        <div style={{ marginTop: "2rem", marginBottom: "1rem" }}>
+            <h2>{title}</h2>
+            <p>{description}</p>
         </div>
-      ))}
-    </div>
-  )
+    )
 }

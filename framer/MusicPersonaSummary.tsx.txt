@@ -1,21 +1,61 @@
-type MusicPersonaSummaryProps = {
-    summary: string
-    userName?: string
+import React from "react"
+
+interface MoodBalance {
+    Reflect: number
+    Gym: number
+    Chill: number
 }
 
-export function MusicPersonaSummary({
-    summary,
-    userName,
-}: MusicPersonaSummaryProps) {
+interface Props {
+    summary: string
+    moodBalance?: MoodBalance
+}
+
+export default function MusicPersonaSummary({ summary, moodBalance }: Props) {
+    const renderMoodText = () => {
+        if (!moodBalance) return null
+
+        const entries = Object.entries(moodBalance)
+            .filter(([_, value]) => value > 0)
+            .sort((a, b) => b[1] - a[1])
+
+        if (entries.length === 0) return null
+
+        const [primaryMood, primaryVal] = entries[0]
+        const secondaries = entries.slice(1)
+
+        const moodLabels: Record<string, string> = {
+            Reflect: "Reflective moods",
+            Gym: "Movement",
+            Chill: "Chill moments",
+        }
+
+        let text = `You lean most into ${moodLabels[primaryMood]} (${primaryVal}%)`
+
+        if (secondaries.length === 1) {
+            const [m, v] = secondaries[0]
+            text += `, with threads of ${moodLabels[m]} (${v}%).`
+        } else if (secondaries.length === 2) {
+            const [m1, v1] = secondaries[0]
+            const [m2, v2] = secondaries[1]
+            text += `, with bursts of ${moodLabels[m1]} (${v1}%) and light touches of ${moodLabels[m2]} (${v2}%).`
+        } else {
+            text += "."
+        }
+
+        return (
+            <p style={{ fontSize: "16px", marginTop: "1rem", color: "#555" }}>
+                {text}
+            </p>
+        )
+    }
+
     return (
-        <div style={{ marginBottom: "32px" }}>
-            <h2 style={{ fontSize: "24px", marginBottom: "8px" }}>
-                🎧{" "}
-                {userName
-                    ? `${userName}'s Music Persona`
-                    : "Your Music Persona"}
-            </h2>
-            <p>{summary}</p>
-        </div>
+        <section style={{ padding: "2rem 0", maxWidth: "600px" }}>
+            <p style={{ fontSize: "18px", lineHeight: "1.6", color: "#222" }}>
+                {summary}
+            </p>
+            {renderMoodText()}
+        </section>
     )
 }
